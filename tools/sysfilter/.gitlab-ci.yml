@@ -1,0 +1,82 @@
+variables:
+  GIT_STRATEGY: clone
+  GIT_SUBMODULE_STRATEGY: recursive
+  SAST_EXCLUDED_ANALYZERS: "semgrep"
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+
+default:
+  image: $CI_REGISTRY_IMAGE/prereqs_ubuntu_18
+
+stages:
+  - all
+  - format
+  - build
+  - test
+
+all-jobs:
+  stage: all
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-$CI_JOB_IMAGE"
+    paths:
+      - extraction/egalito
+  script:
+    - cd extraction
+    - ENABLE_COVERAGE=1 make -j8
+    - make test
+    - bash ../scripts/code_coverage.sh
+    - cd ..
+    - cd test/micro_tests && python3 test.py
+
+.check-format:
+  stage: format
+  script:
+    - pre-commit install --install-hooks
+    - pre-commit run --all-files
+
+.build:
+  stage: build
+  script:
+    - cd extraction
+    - ENABLE_COVERAGE=1 make -j8
+  artifacts:
+    untracked: true
+    paths:
+       - extraction/**/**.so
+       - extraction/app
+
+.test-code-job:
+  stage: test
+  script:
+   - cd extraction && make test -j$(nproc)
+   - bash ../scripts/code_coverage.sh
+  artifacts:
+    paths:
+     - extraction/app/build_x86_64/src/out/**
+    expire_in: '1 day' 
+  coverage: '/  lines\.+: \d+\.\d+% \(\d+ of \d+ lines\)/'
+
+.micro-tests:
+  stage: test
+  needs: ["test-code-job", "build"]
+  script:
+   - cd test/micro_tests && python3 test.py
+  artifacts:
+    paths:
+     - test
+
+sast:
+  stage: all
+  needs: []
+  variables:
+    SAST_EXCLUDED_PATHS: "extraction/egalito"
+  before_script:
+   - pip install cvt2utf
+   - cvt2utf cvt extraction/ -i c cpp -x txt
+  after_script:
+   - python3 scripts/generate_sast_report.py
+  artifacts:
+    paths:
+      - gl-sast-report.json
+      - sast-report.html

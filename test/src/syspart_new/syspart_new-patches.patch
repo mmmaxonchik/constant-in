@@ -1,0 +1,148 @@
+diff --git a/analysis/app/src/syspart.cpp b/analysis/app/src/syspart.cpp
+index 627816d..489bcef 100644
+--- a/analysis/app/src/syspart.cpp
++++ b/analysis/app/src/syspart.cpp
+@@ -218,7 +218,7 @@ void Syspart::findDirectSyscalls()
+         auto list = findSyscalls.getNumberMap();
+         s->syscallMap = list;
+         s->func = f;
+-        bitset<350> bs;   //initialized with zero;
++        bitset<SYSCALL_BITS> bs;   // initialized with zero
+         for(auto kv : list)
+         {
+             auto syscallValues = kv.second;
+@@ -226,7 +226,16 @@ void Syspart::findDirectSyscalls()
+             {
+                 (s->direct_syscalls).insert(value);
+                 (s->all_syscalls).insert(value);
+-                bs[value]=1;
++                // Guard against malformed/unknown syscall numbers.
++                if (static_cast<size_t>(value) < Syspart::SYSCALL_BITS) {
++                    bs.set(static_cast<size_t>(value));
++                }
++                else
++                {
++                    cerr << "[syspart] WARN: syscall number out of range: " << value
++                         << " (max bitset index=" << (SYSCALL_BITS-1) << ") in function "
++                         << (f ? f->getName() : "<null>") << "\n";
++                }
+                 auto iter = who_invokes_syscalls.find(value);
+                 if(iter == who_invokes_syscalls.end())
+                 {
+@@ -333,6 +342,11 @@ void Syspart::findDerivedSyscalls(Function* func)
+     for(auto w : who_invokes_syscalls)
+     {
+         int sysno = w.first;
++
++        // Skip malformed syscall numbers early.
++        if(sysno < 0 || static_cast<size_t>(sysno) >= SYSCALL_BITS)
++            continue;
++
+         for(auto s : w.second)
+         {
+             stack<tuple<IPCallGraphNode*,IPCallGraphNode*>> st;
+@@ -378,15 +392,14 @@ void Syspart::findDerivedSyscalls(Function* func)
+                 auto bitset_it = (sys_node->syscall_info).find(sys_child);
+                 if(bitset_it == (sys_node->syscall_info).end())
+                 {
+-                    string bs_string(350,'0');
+-                    bitset<350> bs(bs_string);
+-                    bs.set(sysno);
++                    bitset<SYSCALL_BITS> bs; // all zeros
++                    bs.set(static_cast<size_t>(sysno));
+                     (sys_node->syscall_info)[sys_child] = bs;
+                 }
+                 else
+                 {
+                     auto bs = bitset_it->second;
+-                    bs.set(sysno);
++                    bs.set(static_cast<size_t>(sysno));
+                     (sys_node->syscall_info)[sys_child] = bs;
+ 
+                 }
+@@ -423,27 +436,26 @@ void Syspart::findDerivedSyscalls3(Function* func)
+     for(auto s : syscall_mapping)
+     {
+         auto sysnode = s.second;
+-        string bs_string(350,'0');
+-        bitset<350> bs(bs_string);
++        bitset<SYSCALL_BITS> bs; // all zeros
+         for(auto ss : sysnode->syscall_info)
+         {
+             if(sysnode != ss.first)
+                 bs |= ss.second;
+         }
+-        for(int i=0; i<350; i++)
++        for(size_t i=0; i<SYSCALL_BITS; i++)
+         {
+             if(bs.test(i))
+-                sysnode->derived_syscalls.insert(i);
++                sysnode->derived_syscalls.insert(static_cast<int>(i));
+         }
+     }
+ 
+ }
+ 
+-bitset<350> Syspart::buildSysCallTree(IPCallGraphNode* ip_node, bool *flag)
++std::bitset<Syspart::SYSCALL_BITS> Syspart::buildSysCallTree(IPCallGraphNode* ip_node, bool *flag)
+ {
+ 	auto iter = syscall_mapping.find(ip_node);
+   	if(iter == syscall_mapping.end())
+-  		return NULL;
++		return {};
+ 
+   	auto n = (iter)->second;
+ 	auto children = ip_node->getAllCallTargets();
+@@ -461,8 +473,7 @@ bitset<350> Syspart::buildSysCallTree(IPCallGraphNode* ip_node, bool *flag)
+     //cout<<build_recursion<<n->name<<" "<<build_count<<endl;
+     build_count++;
+     cout<<build_count<<endl;
+-    bitset<350> bsFinal = (n->syscall_info)[n];
+-    string bs_init_string(350,'0');
++    bitset<SYSCALL_BITS> bsFinal = (n->syscall_info)[n];
+     for(auto child : children)    //Loop to get the all the system calls of its children
+     {
+         
+@@ -476,7 +487,7 @@ bitset<350> Syspart::buildSysCallTree(IPCallGraphNode* ip_node, bool *flag)
+         auto mapIter = (n->syscall_info).find(child_node);
+ 
+         
+-        bitset<350> bs(bs_init_string);
++        bitset<SYSCALL_BITS> bs; // all zeros
+         if(mapIter != (n->syscall_info).end())  //contains
+         {
+             bs = mapIter->second;
+diff --git a/analysis/app/src/syspart.h b/analysis/app/src/syspart.h
+index c87b3c0..766da15 100644
+--- a/analysis/app/src/syspart.h
++++ b/analysis/app/src/syspart.h
+@@ -17,6 +17,11 @@ using namespace std;
+ class Syspart
+ {
+ 	public :
++		// NOTE: We index these bitsets by *raw* syscall numbers.
++		// Modern Linux x86_64 uses syscall numbers well above 350 (e.g., clone3=435),
++		// and x32 uses numbers starting at 512. Keep this comfortably large.
++		static constexpr size_t SYSCALL_BITS = 2048;
++
+ 		struct SysNode
+ 		{
+ 			Function *func;
+@@ -24,7 +29,7 @@ class Syspart
+     		set<int> derived_syscalls;
+     		set<int> all_syscalls;
+     		int color;
+-    		std::map<SysNode*,bitset<350>> syscall_info;   //All system calls from the function <Node,bitset>, where node is one among the children
++	    	std::map<SysNode*,bitset<SYSCALL_BITS>> syscall_info;   //All system calls from the function <Node,bitset>, where node is one among the children
+     		std::map<Instruction *, std::set<unsigned long>> syscallMap;
+ 		};
+ 
+@@ -73,7 +78,7 @@ class Syspart
+ 		void findDerivedSyscalls(Function *func);
+ 		void findDerivedSyscalls3(Function *func);
+ 
+-		bitset<350> buildSysCallTree(IPCallGraphNode *n, bool *flag);
++		bitset<SYSCALL_BITS> buildSysCallTree(IPCallGraphNode *n, bool *flag);
+ 		void getSyscallInfo(Function *func);
+ 		SysNode* getSysNode(Function *f);
+ 		set<int> findSyscallsAccessible(address_t addr, Function* f);

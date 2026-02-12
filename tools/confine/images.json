@@ -1,0 +1,128 @@
+{
+    "couchbase": {
+        "enable": "false",
+        "image-name": "couchbase",
+        "image-url": "couchbase",
+        "category": [
+            "Storage",
+            "ApplicationFrameworks"
+        ],
+        "pull-count": 38989426,
+        "official": true,
+        "options": "",
+        "args": "",
+        "dependencies": {},
+        "id": "5"
+    },
+    "redis": {
+        "enable": "false",
+        "image-name": "redis",
+        "image-url": "redis",
+        "category": [
+            "Databases"
+        ],
+        "pull-count": 1690741773,
+        "official": true,
+        "options": "",
+        "args": "",
+        "dependencies": {},
+        "id": "8"
+    },
+    "mongo": {
+        "enable": "false",
+        "image-name": "mongo",
+        "image-url": "mongo",
+        "category": [
+            "Databases"
+        ],
+        "pull-count": 1831318554,
+        "official": true,
+        "options": "",
+        "args": "",
+        "dependencies": {},
+        "id": "10"
+    },
+    "postgres": {
+        "enable": "false",
+        "image-name": "postgres",
+        "image-url": "postgres",
+        "category": [
+            "Databases"
+        ],
+        "pull-count": 1110065133,
+        "official": true,
+        "options": "-e POSTGRES_PASSWORD=password",
+        "args": "",
+        "dependencies": {},
+        "id": "14"
+    },
+    "nginx": {
+        "enable": "true",
+        "image-name": "nginx",
+        "image-url": "nginx",
+        "category": [
+            "ApplicationInfrastructure"
+        ],
+        "pull-count": 1960017377,
+        "official": true,
+        "options": "",
+        "args": "",
+        "dependencies": {},
+        "id": "15"
+    },
+    "mysql": {
+        "enable": "false",
+        "image-name": "mysql",
+        "image-url": "mysql",
+        "category": [
+            "Databases"
+        ],
+        "pull-count": 903550824,
+        "official": true,
+        "options": "-e MYSQL_ROOT_PASSWORD=my-secret-pw",
+        "args": "",
+        "dependencies": {},
+        "id": "16"
+    },
+    "httpd": {
+        "enable": "false",
+        "image-name": "httpd",
+        "image-url": "httpd"
+    },
+    "memcached": {
+        "enable": "false",
+        "image-name": "memcached",
+        "image-url": "memcached",
+        "category": [
+            "Storage"
+        ],
+        "pull-count": 768466201,
+        "official": true,
+        "options": "",
+        "args": "",
+        "dependencies": {},
+        "id": "26"
+    },
+    "wordpress": {
+        "enable": "false",
+        "image-name": "wordpress",
+        "image-url": "wordpress",
+        "category": [
+            "ApplicationServices"
+        ],
+        "pull-count": 303530959,
+        "official": true,
+        "options": "-e WORDPRESS_DB_PASSWORD=wpuser@ -p 80:80 -v /tmp/html:/var/www/html",
+        "args": "",
+        "dependencies":
+        {
+            "mariadb": {
+                "image-name": "mysql",
+                "image-url": "mysql",
+                "options": "-e MYSQL_ROOT_PASSWORD=aqwe123 -e MYSQL_USER=wpuser -e MYSQL_PASSWORD=wpuser@ -e MYSQL_DATABASE=wordpress_db",
+                "link": true
+            }
+        },
+        "id": "38"
+    }
+}

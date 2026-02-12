@@ -1,0 +1,6 @@
+{
+  global:
+    sysfilter_analyze;
+    sysfilter_free_result;
+  local: *;
+};

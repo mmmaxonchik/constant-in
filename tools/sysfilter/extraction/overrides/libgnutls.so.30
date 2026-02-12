@@ -1,0 +1,4 @@
+blockoverride module libgnutls.so.30 func K_XX_XX
+    0x0 0x0
+blockoverride module libgnutls.so.30 func padlock_sha512_blocks
+    0x5f 0x2

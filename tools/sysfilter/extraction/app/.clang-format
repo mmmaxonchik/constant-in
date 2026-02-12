@@ -1,0 +1,31 @@
+BasedOnStyle: WebKit
+AlwaysBreakTemplateDeclarations: true
+IndentWidth: 4
+UseTab: Never
+PointerAlignment: Right
+ColumnLimit: 80
+BreakBeforeBinaryOperators: All
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterClass: false
+    AfterFunction: false
+    AfterEnum: false
+    AfterNamespace: false
+    AfterStruct: false
+    BeforeCatch: true
+    BeforeElse: true
+IndentCaseLabels: false
+BreakConstructorInitializersBeforeComma: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: true
+BinPackArguments: true
+BinPackParameters: true
+IndentWrappedFunctionNames: false
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+NamespaceIndentation: None
+Standard: Cpp11
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+SpaceBeforeAssignmentOperators: true
+AlignAfterOpenBracket: DontAlign
+AllowAllParametersOfDeclarationOnNextLine: true

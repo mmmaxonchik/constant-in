@@ -1,0 +1,4 @@
+[submodule "extraction/egalito"]
+	path = extraction/egalito
+	url = ../egalito.git
+	branch = metis-master

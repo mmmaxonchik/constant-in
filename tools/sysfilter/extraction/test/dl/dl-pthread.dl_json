@@ -1,0 +1,6 @@
+[
+	{
+		"path": "/lib/x86_64-linux-gnu/libpthread.so.0",
+		"symbols": ["pthread_create@@GLIBC_2.2.5"]
+	}
+]

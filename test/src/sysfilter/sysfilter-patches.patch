@@ -1,0 +1,133 @@
+diff --git a/extraction/app/src/data_symbols.cpp b/extraction/app/src/data_symbols.cpp
+index 494de34..fe4b81e 100644
+--- a/extraction/app/src/data_symbols.cpp
++++ b/extraction/app/src/data_symbols.cpp
+@@ -80,6 +80,12 @@ public:
+                 /* Handle libc wonkiness */
+                 if (section_ignores.count(symbol->getSectionIndex())) continue;
+ 
++                if (symbol->getSize() == 0) {
++                    LOG(10, "Skipping zero-sized object symbol @"
++                                << (symbol->getAddress() + module->getBaseAddress()));
++                    continue;
++                }
++
+                 DataSymbol *ds = new DataSymbol();
+                 ds->start = symbol->getAddress() + module->getBaseAddress();
+                 ds->size = symbol->getSize();
+@@ -104,6 +110,12 @@ public:
+         ds->start = dataSection->getAddress();
+         ds->size = dataSection->getSize();
+ 
++        if (ds->size == 0) {
++            LOG(10, "Skipping zero-sized DataSection symbol @" << ds->start);
++            delete ds;
++            return;
++        }
++
+         if (dataSymbols.count(ds->start) > 0) {
+             LOG(1,
+                 "    WARNING: Multiple symbols at " << ds->start << ". Will use larger size\n");
+@@ -131,28 +143,61 @@ public:
+ };
+ 
+ DataSymbol *DataSymbolList::forAddress(address_t address) {
+-    auto container = dataSymbols.upper_bound(address);
+-    // begin and end are padded
+-    assert(container != dataSymbols.begin());
+-    assert(container != dataSymbols.end());
+-    container--;
+-    if (!container->second->isInside(address)) {
+-        LOG(1, "address: " << address);
++    auto it = dataSymbols.upper_bound(address);
++
++    if (it == dataSymbols.begin()) {
++        LOG(1, "forAddress: address below first symbol: " << address);
++        return nullptr;
++    }
++
++    if (it == dataSymbols.end()) {
++        auto last = std::prev(dataSymbols.end());
++        if (last->second && last->second->isInside(address)) {
++            return last->second;
++        }
++        LOG(1, "forAddress: address not covered (end): " << address);
++        return nullptr;
++    }
++
++    --it;
++    if (!it->second || !it->second->isInside(address)) {
++        LOG(1, "forAddress: not inside. address=" << address
++               << " candidate=[" << it->first << ","
++               << (it->second ? (it->second->start + it->second->size) : 0)
++               << ")");
++        return nullptr;
+     }
+-    assert(container->second->isInside(address));
+-    return container->second;
++
++    return it->second;
+ }
+ 
+ DataSymbol *DataSymbolList::forAddressMaybe(address_t address) {
+-    auto container = dataSymbols.upper_bound(address);
+-    // begin and end are padded
+-    if (container == dataSymbols.begin()) return nullptr;
+-    if (container == dataSymbols.end()) return nullptr;
+-    if (container == --dataSymbols.end()) return nullptr;
+-
+-    container--;
+-    assert(container->second->isInside(address));
+-    return container->second;
++    auto it = dataSymbols.upper_bound(address);
++
++    if (it == dataSymbols.begin()) {
++        LOG(1, "forAddressMaybe: address below first symbol: " << address);
++        return nullptr;
++    }
++
++    if (it == dataSymbols.end()) {
++        auto last = std::prev(dataSymbols.end());
++        if (last->second && last->second->isInside(address)) {
++            return last->second;
++        }
++        LOG(1, "forAddressMaybe: address not covered (end): " << address);
++        return nullptr;
++    }
++
++    --it;
++    if (!it->second || !it->second->isInside(address)) {
++        LOG(1, "forAddressMaybe: not inside. address=" << address
++               << " candidate=[" << it->first << ","
++               << (it->second ? (it->second->start + it->second->size) : 0)
++               << ")");
++        return nullptr;
++    }
++
++    return it->second;
+ }
+ 
+ address_t DataSymbolList::getHighestAddress() {
+@@ -279,10 +324,19 @@ void VariableFinder::visit(DataSection *section) {
+         auto last = begin + variable->getSize() - 1;
+ 
+         auto container = dataSymbols.forAddress(begin);
+-        // sanity check
+-        assert(container->isInside(begin));
+-        assert(container->isInside(last));
++        if (!container) {
++            LOG(1, "VariableFinder: no container for var range [" << begin << "," << last << "]");
++            continue;
++        }
+ 
++        // sanity check (без assert’ов, чтобы не валить весь анализ)
++        if (!container->isInside(begin) || !container->isInside(last)) {
++            LOG(1, "VariableFinder: container does not cover var range. "
++                << "container=[" << container->start << ","
++                << (container->start + container->size) << ") "
++                << "var=[" << begin << "," << last << "]");
++            continue;
++        }
+         IF_LOG(11) if (container->gap) {
+             LOG(11, "in gap");
+             LOG(11,

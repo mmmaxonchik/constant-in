@@ -1,0 +1,5 @@
+/build_x86_64
+/build_riscv
+.symlinks
+/sysfilter_extract
+/core

@@ -1,0 +1,6 @@
+{
+  global:
+    syspart_analyze;
+    syspart_free_result;
+  local: *;
+};

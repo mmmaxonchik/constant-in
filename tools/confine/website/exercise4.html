@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="icon" href="/static/img/favicon.ico"/>
+
+  
+  <title>Confine Tutorial</title>
+
+<link rel="stylesheet" href="https://assets.ubuntu.com/v1/vanilla-framework-version-1.8.0.min.css" />
+<link rel="stylesheet" href="mystyle.css" />
+</head>
+<body>
+<div class="page-wrap">
+<!--<h1>Confine: Automated System Call Policy Generation for Container Attack Surface Reduction</h1>-->
+<h1>Confine Hands-on Exercise 4</h1>
+<p>
+In this page we will walk through the steps required to generate a Seccomp
+profile for a Docker image.
+This guide has been prepared for use in the Software Security Summer
+School (SSSS'20).
+</p>
+<p class="thick">NOTE: It is assumed that the <a href="installationguide.html">Installation Guide</a> has been 
+followed. Reading
+the <a href="userguide.html">User Guide</a> prior to performing these steps is also advised.</p>
+
+<p>After you connect to the provided AWS instance, open a terminal and run the
+following commands.
+</p>
+
+<div class="tab">
+    <h3>Prerequisite</h3>
+<!--  <button class="tablinks" onclick="openExercise(event, 'Exercise0')">Hands-on Exercise 0</button> -->
+</div>
+
+<div id="Exercise0" class="tabcontent">
+
+    <h4>System Validation</h4>
+          <p>We will  first check that we are running the correct
+            kernel version required for completing the hands-on exercise.</p>
+          <pre><span class="tryit_run">uname --kernel-release</span></pre>
+          <p>This should print the kernel version which should be as follows:</p>
+          <pre class="tryit_output">4.15.0-1054-aws</pre>
+        <p>It is critical that you see the correct Linux kernel version.
+        <br/>
+        <span style="font-weight:bold;">Please use the raise hand feature of Webex to notify one of
+        the panelists if the version does not match.</span>
+        </p>
+
+</div>
+<br/>
+<br/>
+<div class="tab">
+<!--  <button class="tablinks" onclick="openExercise(event, 'Exercise1')">Hands-on Exercise 1</button>-->
+  <h3>Hands-on Exercise 4 - Using Confine to Harden a Docker Image</h3>
+</div>
+
+<div id="Exercise1" class="tabcontent">
+  <p>1. Change your current working directory to the root of the respository (<tt>/home/ubuntu/confine</tt>).</p>
+    <pre>cd /home/ubuntu/confine</pre>
+    <p>2. This time choose one of the following Docker images: Apache Httpd or
+MySQL. Try to find the correct image-url by searching for the
+image in <a href="https://hub.docker.com">Docker Hub</a>.
+    <span style="font-weight:bold;">MySQL needs extra arguments. If you like
+the challenge choose that.</span>
+    <p>3. Open a new file, name it as you like. We will use <tt>myimages.json</tt> in the following examples. If you
+choose another name you need to change the rest of the commands accordingly.
+You can use your favorite text editor (vim, nano, emacs).</p>
+    <pre>vim myimages.json</pre>
+    <p>4. Use the example from Hands-on Exercise 1 to complete the following JSON
+file.</p>
+    <pre>
+{
+    "??": {
+        "enable": "true",
+        "image-name": "??",
+        "image-url": "??",
+        "options": "??",
+        "dependencies": {}
+    }
+}</pre>
+
+    <p>5. Now we are ready to run Confine using the following command and generate the Seccomp profile for Nginx.
+    <br/>
+    <span style="font-weight:bold;">Note: You must run the following command as root.</span>
+    </p>
+
+    <pre>sudo python3.7 confine.py -l libc-callgraphs/glibc.callgraph -m libc-callgraphs/musllibc.callgraph -i myimages.json -o output/ -p default.seccomp.json -r results/ -g go.syscalls/</pre>
+
+    <p>The script will now start analyzing the Nginx Docker image. We will go through
+    each step the script is performing and explain the output:
+    <br/>
+    <span style="font-weight:bold;">a)</span> The script prints the following line, showing it has started its analysis.
+    </p>
+
+    <pre class="tryit_output">
+------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////
+-----&gt;Starting analysis for image: [IMAGENAME]&lt;-----
+////////////////////////////////////////////////////////////////////////</pre>
+
+    <p><span style="font-weight:bold;">b)</span> Then it will start the monitoring phase, which uses 
+    Sysdig to identify the binaries executed in the container. This phase lasts for 60 seconds.
+    <span style="font-style:italic;">(For more details on why we do this please refer to the 
+    <a href="about.html">about</a>  page.)</span><br/>
+    In case it is the first time we are hardening a Docker image and we haven't
+    previously extracted the list of binaries and libraries it will first print:</p>
+
+    <pre class="tryit_output">Cache doesn't exist, must extract binaries and libraries</pre>
+
+    <p>Then it will monitor the executed binaries by running sysdig, generating the following output:</p>
+
+    <pre class="tryit_output">
+---&gt;Starting MONITOR phase:
+Running sysdig multiple times. Run count: 1 from total: 3
+Ran container sleeping for 60 seconds to generate logs and extract execve
+system calls
+len(psList) from sysdig: 39
+Container: nginx extracted psList with 52 elements
+Running sysdig multiple times. Run count: 2 from total: 3
+Ran container sleeping for 60 seconds to generate logs and extract execve
+system calls
+len(psList) from sysdig: 48
+Container: nginx extracted psList with 62 elements
+Running sysdig multiple times. Run count: 3 from total: 3
+Ran container sleeping for 60 seconds to generate logs and extract execve
+system calls
+len(psList) from sysdig: 45
+Container: nginx extracted psList with 63 elements
+Container: nginx PS List: {'env', '/usr/sbin/sh', '/usr/bin/basename', 'find',
+time...)
+Finished copying identified binaries and libraries
+&lt;---Finished MONITOR phase</pre>
+
+    <p>In case we have previously ran the dynamic analysis phase and extracted all the binaries and
+    libraries, it will only run once. We need this to generate the logs created for
+    the Docker image as our baseline to validate the correctness of the generated
+    Seccomp profile.</p>
+
+    <p><span style="font-weight:bold;">c)</span> The execution of the script can differ in this step, depending on whether the binaries have been extracted or not.
+    In case the dynamic analysis has successfully
+    extracted the set of binaries and libraries from the container, it does not
+    need to copy the binaries and libraries and it will skip this step.
+    Otherwise, it will first generate the list of binaries used in the container
+    and then start copying them.</p>
+
+    <pre class="tryit_output">
+Starting to copy identified binaries and libraries (This can take some time...)
+Finished copying identified binaries and libraries
+&lt;---Finished MONITOR phase</pre>
+
+    <p><span style="font-weight:bold;">d)</span> After the executables have been extracted, 
+    the script then starts extracting any direct system calls in them using objdump. It will go
+    over all the files copied from the container to the temporary output folder
+    and identify direct system calls.
+    </p>
+
+    <pre class="tryit_output">
+---&gt;Starting Direct Syscall Extraction
+Extracting direct system call invocations
+&lt;---Finished Direct Syscall Extraction</pre>
+
+    <p><span style="font-weight:bold;">e)</span> Then, it extracts the list of functions imported by each binary and library.</p>
+    <pre class="tryit_output">
+---&gt;Starting ANALYZE phase
+Extracting imported functions and storing in libs.out
+&lt;---Finished ANALYZE phase</pre>
+
+    <p><span style="font-weight:bold;">f)</span> After it extracts all the direct system calls and combines the imported
+    libc functions with the set of system calls required by those libc functions,
+    it generates the set of prohibited system calls and prints the following line:</p>
+
+    <pre class="tryit_output">
+---&gt;Starting INTEGRATE phase, extracting the list required system calls
+Traversing libc call graph to identify required system calls
+Generating final system call filter list
+************************************************************************************
+Container Name: [IMAGENAME] Num of filtered syscalls (original): n
+************************************************************************************
+&lt;---Finished INTEGRATE phase</pre>
+
+    <p><span style="font-weight:bold;">h)</span> Now that the unnecessary system calls have been extracted, we generate the
+    respective Seccomp profile and validate if it works correctly by
+    launching the container with our generated Seccomp profile.</p>
+
+    <pre class="tryit_output">
+---&gt;Validating generated Seccomp profile: results//[IMAGENAME].seccomp.json
+************************************************************************************
+Finished validation. Container for image: nginx was hardened SUCCESSFULLY!
+************************************************************************************</pre>
+
+    <p>If you see the message <span style="font-style:italic;">Container for image: $$$ was hardened successfully!</span>, this means that the Seccomp profile passed our validation steps.<br/>
+
+    <span style="font-weight:bold; font-style:italic;">IMPORTANT: If you did not see the message above 
+    please ask for help from one of the panelists.</span></p>
+
+
+    <p><span style="font-weight:bold;">i)</span> Finally, the analysis of the Nginx Docker image has finished and Confine prints the following line:</p>
+
+    <pre class="tryit_output">
+///////////////////////////////////////////////////////////////////////////////////////
+-----&gt;Finished extracting system calls for [IMAGENAME], sleeping for 5 seconds&lt;-----
+///////////////////////////////////////////////////////////////////////////////////////
+--------------------------------------------------------------------------------------</pre>
+
+    <p>6. Now that the analysis is complete, we can view the binaries and libraries that were identified as 
+required for the proper execution of the container (stored in
+<tt>./output/[IMAGENAME]</tt>):</p>
+
+    <pre>ls -lh ./output/[IMAGENAME]</pre>
+
+    <p>And the generated Seccomp profile (stored in <tt>./results/nginx.seccomp.json</tt>):</p>
+
+    <pre>cat ./results/nginx.seccomp.json</pre>
+ 
+</div>
+
+<br/>
+<br/>
+<div class="tab">
+  <h3>Security Benefit</h3>
+<!--  <button class="tablinks" onclick="openExercise(event, 'Exercise3')">Hands-on Exercise 3</button>-->
+</div>
+
+<div id="Exercise3" class="tabcontent">
+
+    <p>0. Change your current working directory to the root of the respository again (<tt>/home/ubuntu/confine</tt>).</p>
+    <pre>cd /home/ubuntu/confine</pre>
+
+    <p>1. Which system calls can be filtered? How many are they?</p>
+    <pre>
+cat results/[IMAGENAME].seccomp.json | grep name
+cat results/[IMAGENAME].seccomp.json | grep name | wc -l
+</pre>
+
+    <p>2. Determine which kernel CVEs have been mitigated by disabling the above system calls.
+    You can use the <tt>filterToCveProfile.py</tt> script to map the generated Seccomp
+    profile to the mitigated CVEs.
+    </p>
+
+    <pre>python3.7 filterProfileToCve.py -c cve.files/cveToStartNodes.csv.validated -f results/profile.report.details.csv -o results -v cve.files/cveToFile.json.type.csv --manualcvefile cve.files/cve.to.syscall.manual --manualtypefile cve.files/cve.to.vulntype.manual</pre>
+
+    <p>
+    <tt>-c</tt>: Path to the file containing a map between each CVE and all the starting
+    nodes which can reach the vulnerable point in the kernel call graph
+    <br/>
+    <tt>-f</tt>: This file is generated after you run Confine for a set of containers.
+    It can be found in the results path in the root of the repository.
+    <br/>
+    
+    <tt>-o</tt>: Name of the prefix of the file you would like to store the results in.
+    <br/>
+    
+    <tt>-v</tt>: A CSV file containing the mapping of CVEs to their vulnerability type.
+    <br/>
+    
+    <tt>--manualcvefile</tt>: Some CVEs have been gathered manually which can be specified
+    using this option.
+    <br/>
+    
+    <tt>--manualtypefile</tt>: A file containing the mapping of CVEs identified manually to
+    their respective vulnerability type.
+    <br/>
+    
+    <tt>-d</tt>: Enable/disable debug mode which prints much more log messages.
+    <br/>
+    
+    <span style="font-weight:bold; font-style:italic;">Note: The scripts required to generate the mapping between the kernel
+    functions
+    and their CVEs are in a separate repository. You do not need to recreate those
+    results.</span>
+    
+    <br/>
+    After you run the script above a single file will be created named
+    <tt>results.container.csv</tt>. Each line corresponds to a CVE mitigated in at least one of the Docker images
+    provided in the <tt>profile.report.details.csv</tt> file. Keep in mind
+that the generated file will have the CVEs for all containers hardened in any
+previous run. The last column in the CSV shows the names of the Docker images
+which each CVE has been mitigated in.<br/>
+    Line format:
+    </p>
+    <pre class="tryit_output">
+cveid;system call names(can be more than one);cve-type(can be more than one);was-it-mitigated-by-the-default-seccomp-policies;number-of-docker-images-affected;names of docker images</pre>
+
+    <pre class="tryit_output">CVE-2015-8539;add_key, keyctl;Denial Of Service, Gain privileges;True;1;nginx</pre>
+
+    <p>3. View all the mitigated CVEs reported in <tt>results.container.csv</tt>.
+    Is CVE-2017-5123 mitigated by applying the Seccomp profile? You can also view the subset of CVEs 
+that were not mitigated by the default Docker Seccomp filter, but are now mitigated by Confine.</p>
+<pre>
+cat results.container.csv
+cat results.container.csv | grep False
+</pre>
+
+
+</div>
+
+<br/>
+<br/>
+<br/>
+<br/>
+<script>
+function openExercise(evt, exerciseName) {
+  var i, tabcontent, tablinks;
+  tabcontent = document.getElementsByClassName("tabcontent");
+  //for (i = 0; i < tabcontent.length; i++) {
+  //  tabcontent[i].style.display = "none";
+  //}
+  //tablinks = document.getElementsByClassName("tablinks");
+  //for (i = 0; i < tablinks.length; i++) {
+  //  tablinks[i].className = tablinks[i].className.replace(" active", "");
+  //}
+  document.getElementById(exerciseName).style.display = "block";
+  evt.currentTarget.className += " active";
+}
+</script>
+</body>
+</body>
+</html> 

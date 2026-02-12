@@ -1,0 +1,6 @@
+[
+	{
+		"path": "libextra.so",
+		"symbols": ["foo"]
+	}
+]

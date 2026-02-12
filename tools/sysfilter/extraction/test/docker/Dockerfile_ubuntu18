@@ -1,0 +1,57 @@
+######################################################
+# Stage 1
+######################################################
+FROM ubuntu:18.04 as intermediate
+
+RUN apt-get update && apt-get -y install \
+    build-essential \
+    libc6-dbg \
+    git \
+    lcov \
+    libreadline-dev \
+    gdb \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+# Credentials for cloning
+ARG ssh_prv_key
+RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
+RUN echo "$ssh_prv_key" > /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa
+
+RUN touch /root/.ssh/known_hosts && chmod 700 /root/.ssh/known_hosts
+RUN ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
+
+# Sysfilter clone
+RUN git clone git@gitlab.com:METIS/egalito/sysfilter.git
+RUN cd /root/../sysfilter && git submodule update --init --recursive
+RUN cd /root/../sysfilter/extraction && make -j8
+
+######################################################
+# Stage 2
+######################################################
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get -y install \
+    build-essential \
+    libc6-dbg \
+    git \
+    lcov \
+    libreadline-dev \
+    gdb \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=intermediate /sysfilter/ /sysfilter/
+
+######################################################
+# Steps to run this Dockerfile.
+
+# docker build -t sysfilter_image --build-arg ssh_prv_key="$(less ~/.ssh/id_rsa)" .
+# docker run -it sysfilter_image:latest
+
+# To push
+
+# docker build -t registry.gitlab.com/metis/egalito/sysfilter --build-arg ssh_prv_key="$(less ~/.ssh/id_rsa)" .
+# docker push registry.gitlab.com/metis/egalito/sysfilter
+######################################################

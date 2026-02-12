@@ -1,0 +1,31 @@
+blockoverride module libcrypto.so.1.1 func K256
+ 0x0 0x0
+blockoverride module libcrypto.so.1.1 func K256_shaext
+ 0x0 0x0
+blockoverride module libcrypto.so.1.1 func K512
+ 0x0 0x0
+blockoverride module libcrypto.so.1.1 func K_XX_XX
+ 0x0 0x0
+blockoverride module libcrypto.so.1.1 func RC4_options
+ 0x0 0x13
+ 0x13 0x6
+ 0x19 0x6
+ 0x1f 0x6
+blockoverride module libcrypto.so.1.1 func ChaCha20_8x
+ 0xb4b 0x2
+blockoverride module libcrypto.so.1.1 func ChaCha20_8xvl
+ 0x787 0x2
+blockoverride module libcrypto.so.1.1 func ChaCha20_16x
+ 0x9e1 0x2
+blockoverride module libcrypto.so.1.1 func ChaCha20_avx512
+ 0x332 0x2
+blockoverride module libcrypto.so.1.1 func ChaCha20_avx512vl
+ 0x24a 0x2
+blockoverride module libcrypto.so.1.1 func poly1305_blocks_avx512
+ 0x91d 0x2
+blockoverride module libcrypto.so.1.1 func poly1305_blocks_vpmadd52
+ 0x199 0x2
+blockoverride module libcrypto.so.1.1 func poly1305_blocks_vpmadd52_4x
+ 0x782 0x2
+blockoverride module libcrypto.so.1.1 func poly1305_blocks_vpmadd52_8x
+ 0x619 0x2

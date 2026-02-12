@@ -1,0 +1,170 @@
+#!/bin/bash
+
+#
+# Copyright (C) 2017-2021, Brown University, Secure Systems Lab.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#   * Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#   * Neither the name of Brown University nor the
+#     names of its contributors may be used to endorse or promote products
+#     derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+set -euo pipefail
+#set -x
+
+BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+BUILD_FILTER_BINARY_SEARCH="${BASE_DIR}/skip_list_filter.py"
+BUILD_FILTER_LINEAR="${BASE_DIR}/linear_filter.py"
+BUILD_FILTER_FULL="${BASE_DIR}/all_filter.py"
+BUILD_FILTER_NULL="${BASE_DIR}/nop_filter.py"
+
+BUILD_FILTER=$BUILD_FILTER_BINARY_SEARCH
+
+CC="gcc"
+CFLAGS="-shared -fPIC"
+
+PATCH="patchelf"
+PFLAGS="--add-needed"
+
+LIB_NAME_PREFIX="libsysfilter"
+DEFAULT_OUT_DIR_NAME=".sysfilter"
+
+main()
+{
+    if [ $# -lt 2 ]; then
+	echo "Usage: $0 [OPTION...] <binary> <policy> [<policy>...]"
+	echo "  --mode <bin|linear>  Binary- vs. linear-search seccomp-BPF. (default: bin)"
+	echo "  --spec-allow         Disable the speculative store bypass (SSB) mitigation."
+	echo "  --work-dir <dir>     Use <dir> as the working directory."
+	exit 0
+    fi
+
+    WORK_DIR=""
+    filter_mode="bin"
+    work_use_origin=0
+    spec_allow=0
+
+    POSITIONAL=()
+    while [[ $# -gt 0 ]]; do
+	key=$1
+	case $key in
+	    --mode)
+		filter_mode="$2"
+		shift
+		shift
+		;;
+	    --spec-allow)
+		spec_allow=1
+		shift
+		;;
+	    --work-dir)
+		WORK_DIR=$2
+		shift
+		shift
+		;;
+	    --work-use-origin)
+		work_use_origin=1
+		shift
+		;;
+	    *)
+		POSITIONAL+=("$1")
+		shift
+	esac
+    done
+    set -- "${POSITIONAL[@]}"
+    export BINARY=$1
+    shift
+    export POLICIES=$@
+
+    echo "BINARY: $BINARY"
+    echo "POLICIES: $POLICIES"
+
+    [[ ! -r $BINARY ]] && echo "Invalid filename: $BINARY" && exit 1
+
+    for PFILE in $(echo $POLICIES); do
+      [[ $PFILE == "-" ]] && continue
+      [[ ! -r $PFILE ]] && echo "Invalid filename: $PFILE" && exit 1
+    done
+
+    rname=$(basename $BINARY)
+    lib_rname="${LIB_NAME_PREFIX}-${rname}"
+
+    if [[ $WORK_DIR != "" ]]; then
+	OUT_DIR=$WORK_DIR
+	if [[ $work_use_origin == 1 ]]; then
+	    REL_WORK_DIR=$(realpath --relative-to="$(dirname $(realpath ${BINARY}))" ${WORK_DIR})
+	    LIB_PATH="\$ORIGIN/${REL_WORK_DIR}/${lib_rname}.so"
+	else
+	    LIB_PATH="${WORK_DIR}/${lib_rname}.so"
+	fi
+    else
+	OUT_DIR="$(dirname ${BINARY})/${DEFAULT_OUT_DIR_NAME}"
+	LIB_PATH="\$ORIGIN/${DEFAULT_OUT_DIR_NAME}/${lib_rname}.so"
+    fi
+
+    mkdir -p $OUT_DIR
+
+    FILTER_SRC="${OUT_DIR}/filter_${rname}.c"
+
+    LIB_OUT="${OUT_DIR}/${lib_rname}.so"
+
+    if [[ $filter_mode == "linear" ]]; then
+	echo "FILTER: linear"
+	BUILD_FILTER=$BUILD_FILTER_LINEAR
+    elif [[ $filter_mode == "null" ]]; then
+	echo "FILTER: null"
+	BUILD_FILTER=$BUILD_FILTER_NULL
+    elif [[ $filter_mode == "bin" ]]; then
+	echo "FILTER: binary"
+	BUILD_FILTER=$BUILD_FILTER_BINARY_SEARCH
+    elif [[ $filter_mode == "full" ]]; then
+        echo "FILTER: full"
+        BUILD_FILTER=$BUILD_FILTER_FULL
+    else
+	echo "Invalid filter mode: ${filter_mode}"
+	exit 1
+    fi
+
+    FILTER_ARGS=""
+    if [[ $spec_allow == 1 ]]; then
+	echo "Disabling Spectre (Variant 4, SSB) mitigations in filter"
+	FILTER_ARGS="${FILTER_ARGS} --spec-allow"
+    fi
+
+    $BUILD_FILTER $FILTER_ARGS $POLICIES > $FILTER_SRC
+
+    $CC $CFLAGS -o $LIB_OUT $FILTER_SRC
+    BACKUP_FILE=${OUT_DIR}/$(basename ${BINARY}).orig
+    if [[ -e $BACKUP_FILE ]]; then
+    	echo "Using existing backup file at ${BACKUP_FILE}"
+     else
+	echo "BACKUP: $BACKUP_FILE"
+    	cp $BINARY $BACKUP_FILE
+    fi
+
+    $PATCH $PFLAGS $LIB_PATH $BINARY
+    rm -f $FILTER_SRC
+}
+
+main $@

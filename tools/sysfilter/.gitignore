@@ -1,0 +1,8 @@
+*~
+\#*\#
+build/*
+dst/*
+*.o
+sysfilter
+.*.swp
+__pycache__/

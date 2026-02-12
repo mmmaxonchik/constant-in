@@ -1,0 +1,25 @@
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get -y install \
+    build-essential \
+    libc6-dbg \
+    git \
+    lcov \
+    libreadline-dev \
+    gdb \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+
+######################################################
+# Steps to run this Dockerfile.
+
+# docker build -f Dockerfile_18 -t prereqs_ubuntu_18 .
+# docker run -it prereqs_ubuntu_18:latest
+
+# To push
+
+# docker build -f Dockerfile_18 -t registry.gitlab.com/grammatech/egalito/sysfilter/prereqs_ubuntu_18 .
+# docker push registry.gitlab.com/grammatech/egalito/sysfilter/prereqs_ubuntu_18
+
+######################################################

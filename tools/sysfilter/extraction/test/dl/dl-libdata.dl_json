@@ -1,0 +1,6 @@
+[
+	{
+		"path": "libdata.so",
+		"symbols": ["foo"]
+	}
+]

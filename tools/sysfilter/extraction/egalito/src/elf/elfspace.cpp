@@ -1,0 +1,157 @@
+#include <stdlib.h>  // for realpath() [ARM]
+#include <libgen.h>  // for dirname() [ARM]
+#include <limits.h>  // for PATH_MAX [ARM]
+#include <string.h>  // for strdup()
+#include <iomanip>
+#include <sstream>
+#include <elf.h>
+#include <fstream>
+#include "elfspace.h"
+#include "elfmap.h"
+#include "sharedlib.h"
+#include "symbol.h"
+#include "elfdynamic.h"
+#include "dwarf/parser.h"
+#include "chunk/concrete.h"
+#include "chunk/aliasmap.h"
+#include "elfxx.h"
+#include "types.h"
+#include "conductor/filesystem.h"
+#include "log/log.h"
+
+#include "config.h"
+
+ElfSpace::ElfSpace(ElfMap *elf, const std::string &name,
+    const std::string &fullPath) : elf(elf), dwarf(nullptr),
+    name(name), fullPath(fullPath), module(nullptr),
+    symbolElf(nullptr), symbolList(nullptr), dynamicSymbolList(nullptr),
+    relocList(nullptr), aliasMap(nullptr) {
+
+}
+
+ElfSpace::~ElfSpace() {
+    delete elf;
+    delete dwarf;
+    // Module is owned and deleted by Program's ChunkListImpl; do NOT delete here.
+    delete symbolList;
+    delete symbolElf;
+    delete dynamicSymbolList;
+    delete relocList;
+    delete aliasMap;
+}
+
+void ElfSpace::findSymbolsAndRelocs() {
+    if(fullPath.size() > 0) {
+        useAlternativeSymbolFile();
+    }
+
+    if (!symbolList) {
+        this->symbolList = SymbolList::buildSymbolList(elf);
+    }
+
+    if(!symbolList) {
+        DwarfParser dwarfParser(elf);
+        this->dwarf = dwarfParser.getUnwindInfo();
+    }
+
+    if(elf->isDynamic()) {
+        this->dynamicSymbolList = SymbolList::buildDynamicSymbolList(elf);
+    }
+
+    this->relocList
+        = RelocList::buildRelocList(elf, symbolList, dynamicSymbolList);
+}
+
+void ElfSpace::useAlternativeSymbolFile() {
+    auto buildIdSection = elf->findSection(".note.gnu.build-id");
+    if(buildIdSection) {
+        auto buildIdHeader = buildIdSection->getHeader();
+        auto section = elf->getSectionReadPtr<const char *>(buildIdSection);
+        auto note = elf->getSectionReadPtr<ElfXX_Nhdr *>(buildIdSection);
+        auto sectionEnd = reinterpret_cast<const ElfXX_Nhdr *>(section + buildIdHeader->sh_size);
+        while(note < sectionEnd) {
+            if(note->n_type == NT_GNU_BUILD_ID) {
+                const char *p = reinterpret_cast<const char *>(note + 1) + 4;  // +4 to skip "GNU" string
+
+                std::ostringstream symbolFile;
+                symbolFile << ConductorFilesystem::getInstance()->transform(
+                    "/usr/lib/debug/.build-id/");
+
+                for(size_t i = 0; i < note->n_descsz; i ++) {
+                    symbolFile << std::setw(2) << std::setfill('0') << std::hex
+                        << ((int)p[i] & 0xff);
+                    if(i == 0) symbolFile << "/";
+                }
+                symbolFile << ".debug";
+
+                if(tryAlternativeSymbolFile(symbolFile.str())) return;
+            }
+
+            size_t align = ~((1 << buildIdHeader->sh_addralign) - 1);
+            note += ((sizeof(*note) + note->n_namesz + note->n_descsz) + (align-1)) & align;
+        }
+    }
+
+    std::ostringstream symbolFile;
+    symbolFile << ConductorFilesystem::getInstance()->transform("/usr/lib/debug");
+    char *realPath = realpath(fullPath.c_str(), NULL);
+    if(realPath) {
+        std::string untransformed =
+            ConductorFilesystem::getInstance()->untransform(realPath);
+        auto debuglink = elf->findSection(".gnu_debuglink");
+        if(debuglink) {
+            char *utc = strdup(untransformed.c_str());
+            auto name = elf->getSectionReadPtr<char *>(debuglink);
+            symbolFile << dirname(utc) << "/" << name;
+            free(utc);
+        }
+        else {
+            symbolFile << realPath << ".debug";
+        }
+
+        free(realPath);
+        if(tryAlternativeSymbolFile(symbolFile.str())) return;
+
+    }
+
+    useAlternativeSymbolFileMultiArch();
+}
+
+void ElfSpace::useAlternativeSymbolFileMultiArch() {
+    auto debuglink = elf->findSection(".gnu_debuglink");
+    if(!debuglink) {
+        return;
+    }
+    auto symbol_name = elf->getSectionReadPtr<char *>(debuglink);
+
+    std::ifstream march_file("/etc/ld.so.conf.d/x86_64-linux-gnu.conf");
+    if (!march_file.good()) {
+        march_file.close();
+        return;
+    }
+    std::string line;
+    while(std::getline(march_file, line)) {
+        // Ignore comments
+        auto comment_start = line.find("#");
+        line = line.substr(0, comment_start);
+
+        std::string tstSymbolFile = "/usr/lib/debug" + line + "/" + symbol_name;
+        if(tryAlternativeSymbolFile(tstSymbolFile)) {
+            break;
+        }
+    }
+
+    march_file.close();
+}
+
+bool ElfSpace::tryAlternativeSymbolFile(std::string symbolFile) {
+    try {
+        this->symbolElf = new ElfMap(symbolFile.c_str());
+    }
+    catch (...) {
+        this->symbolElf = nullptr;
+        return false;
+    }
+    this->symbolList = SymbolList::buildSymbolList(this->symbolElf);
+    return true;
+}

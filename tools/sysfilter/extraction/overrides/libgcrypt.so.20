@@ -1,0 +1,30 @@
+blockoverride module libgcrypt.so.20 func _gcry_twofish_bswap128_mask
+ 0x0 0x0
+blockoverride module libgcrypt.so.20 func __camellia_enc_blk32
+ 0x5472 0x1
+blockoverride module libgcrypt.so.20 func __camellia_dec_blk32
+ 0x5465 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha256_transform_amd64_avx
+ 0xcd8 0x1
+blockoverride module libgcrypt.so.20 func _gcry_serpent_avx2_ctr_enc
+ 0x28a 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha256_transform_amd64_ssse3
+ 0xd66 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha512_transform_amd64_avx2
+ 0xe22 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha256_transform_amd64_avx2
+ 0x113b 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha1_transform_amd64_avx
+ 0xf32 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha512_transform_amd64_avx
+ 0x34b3 0x1
+blockoverride module libgcrypt.so.20 func _gcry_twofish_avx2_ctr_enc
+ 0x24e 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha512_transform_amd64_ssse3
+ 0x34a5 0x1
+blockoverride module libgcrypt.so.20 func _gcry_camellia_aesni_avx2_ctr_enc
+ 0x585 0x1
+blockoverride module libgcrypt.so.20 func _gcry_mpih_sub_n
+ 0x3a 0x1
+blockoverride module libgcrypt.so.20 func _gcry_sha1_transform_amd64_ssse3
+ 0xfce 0x1

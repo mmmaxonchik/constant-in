@@ -1,0 +1,121 @@
+diff --git a/src/analysis/usedef.cpp b/src/analysis/usedef.cpp
+--- a/src/analysis/usedef.cpp
++++ b/src/analysis/usedef.cpp
+@@ -1952,6 +1952,8 @@ void UseDef::fillMov(UDState *state, AssemblyPtr assembly) {
+ }
+ void UseDef::fillMovabs(UDState *state, AssemblyPtr assembly) {
+     auto mode = assembly->getAsmOperands()->getMode();
++    if(assembly->getId() == X86_INS_MOVABS)
++        mode = AssemblyOperands::MODE_IMM_REG;
+     assert(mode == AssemblyOperands::MODE_IMM_REG);
+     if(mode == AssemblyOperands::MODE_IMM_REG) {
+         fillImmToReg(state, assembly);
+diff --git a/src/disasm/disassemble.cpp b/src/disasm/disassemble.cpp
+index 924d44f4..9efe7d32 100644
+--- a/src/disasm/disassemble.cpp
++++ b/src/disasm/disassemble.cpp
+@@ -456,7 +456,7 @@ Function *DisassembleX86Function::function(Symbol *symbol,
+ 
+     if(dynamicSymbolList) {
+         if(auto dsym = dynamicSymbolList->find(symbolAddress)) {
+-            function->setDynamicSymbol(dsym); 
++            function->setDynamicSymbol(dsym);
+         }
+     }
+ 
+@@ -649,40 +649,48 @@ FunctionList *DisassembleX86Function::linearDisassembly(const char *sectionName,
+ 
+     // Find known functions from DWARF info
+     IntervalTree knownFunctions(sectionRange);
+-    for(auto it = dwarfInfo->fdeBegin(); it != dwarfInfo->fdeEnd(); it ++) {
+-        DwarfFDE *fde = *it;
+-        Range range(fde->getPcBegin(), fde->getPcRange());
+-        if(knownFunctions.add(range)) {
+-            LOG(12, "DWARF FDE at [" << std::hex << fde->getPcBegin() << ",+"
+-                << fde->getPcRange() << "]");
+-        }
+-        else {
+-            LOG(1, "FDE is out of bounds of .text section, skipping");
++    if(dwarfInfo) {
++        for(auto it = dwarfInfo->fdeBegin(); it != dwarfInfo->fdeEnd(); it ++) {
++            DwarfFDE *fde = *it;
++            Range range(fde->getPcBegin(), fde->getPcRange());
++            if(knownFunctions.add(range)) {
++                LOG(12, "DWARF FDE at [" << std::hex << fde->getPcBegin() << ",+"
++                    << fde->getPcRange() << "]");
++            }
++            else {
++                LOG(1, "FDE is out of bounds of .text section, skipping");
++            }
+         }
++    } else {
++        LOG(12, "No DWARF unwind info provided; proceeding without DWARF-known functions");
+     }
+ 
+     // Known functions from symbol information as well
+-    for(size_t i = 0; i < dynamicSymbolList->getCount(); i ++) {
+-        Symbol *symbol = dynamicSymbolList->get(i);
+-        // only care about functions/ifuncs
+-        if(symbol->getType() != Symbol::TYPE_FUNC
+-            && symbol->getType() != Symbol::TYPE_IFUNC) {
++    if(dynamicSymbolList) {
++        for(size_t i = 0; i < dynamicSymbolList->getCount(); i ++) {
++            Symbol *symbol = dynamicSymbolList->get(i);
++            // only care about functions/ifuncs
++            if(symbol->getType() != Symbol::TYPE_FUNC
++                && symbol->getType() != Symbol::TYPE_IFUNC) {
+ 
+-            continue;
+-        }
+-        if(symbol->getSize() == 0) {
+-            LOG(1, "dynamic function [" << symbol->getName()
+-                << "] has size 0, skipping.");
+-            continue;
+-        }
+-        Range range(symbol->getAddress(), symbol->getSize());
+-        if(knownFunctions.add(range)) {
+-            LOG(12, "Dynamic symbol at [" << std::hex << symbol->getAddress()
+-                << ",+" << symbol->getSize() << "]");
+-        }
+-        else {
+-            LOG(1, "Dynamic symbol is out of bounds of .text section, skipping");
++                continue;
++            }
++            if(symbol->getSize() == 0) {
++                LOG(1, "dynamic function [" << symbol->getName()
++                    << "] has size 0, skipping.");
++                continue;
++            }
++            Range range(symbol->getAddress(), symbol->getSize());
++            if(knownFunctions.add(range)) {
++                LOG(12, "Dynamic symbol at [" << std::hex << symbol->getAddress()
++                    << ",+" << symbol->getSize() << "]");
++            }
++            else {
++                LOG(1, "Dynamic symbol is out of bounds of .text section, skipping");
++            }
+         }
++    } else {
++        LOG(12, "No dynamic symbol list provided; proceeding without dynsym-known functions");
+     }
+ 
+     // Run first disassembly pass, to find obvious function boundaries
+@@ -770,11 +778,13 @@ FunctionList *DisassembleX86Function::linearDisassembly(const char *sectionName,
+             << section->convertVAToOffset(range.getStart()));
+         Function *function = fuzzyFunction(range, section);
+ 
+-        if(auto dsym = dynamicSymbolList->find(range.getStart())) {
+-            LOG(12, "    renaming fuzzy function [" << function->getName()
+-                << "] to [" << dsym->getName() << "]");
+-            function->setName(dsym->getName());
+-            function->setDynamicSymbol(dsym);
++        if(dynamicSymbolList) {
++            if(auto dsym = dynamicSymbolList->find(range.getStart())) {
++                LOG(12, "    renaming fuzzy function [" << function->getName()
++                    << "] to [" << dsym->getName() << "]");
++                function->setName(dsym->getName());
++                function->setDynamicSymbol(dsym);
++            }
+         }
+ 
+         functionList->getChildren()->add(function);
