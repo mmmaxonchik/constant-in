@@ -153,6 +153,7 @@ COPY test/src/c /workspace/test/src/c
 COPY test/src/cpp /workspace/test/src/cpp
 COPY test/src/rust /workspace/test/src/rust
 COPY test/src/go /workspace/test/src/go
+COPY test/src/shared /workspace/test/src/shared
 RUN set -euxo pipefail; \
     mapfile -t tests < <(find test/src/c test/src/cpp test/src/go test/src/rust -maxdepth 1 -type f \
       \( -name 't*.c' -o -name 't*.cpp' -o -name 't*.go' -o -name 't*.rs' \) \
@@ -234,6 +235,7 @@ COPY --from=confine_clone \
 COPY --from=tests_build \
     /workspace/test/build \
     /opt/test/build
+RUN echo "/opt/test/build" > /etc/ld.so.conf.d/test_build.conf && ldconfig
 RUN cat > /opt/tools/bin/sysfilter_extract <<'SH' && chmod +x /opt/tools/bin/sysfilter_extract
 #!/bin/sh
 export LD_LIBRARY_PATH=/opt/sysfilter/lib
@@ -252,6 +254,7 @@ SH
 COPY test/src/chestnut/main.py /opt/chestnut/Binalyzer/main.py
 COPY test/src/confine/main.py /opt/confine/main.py
 COPY test/run-test.sh /workspace/run-test.sh
+RUN chmod 0700 /workspace/run-test.sh
 ENV PATH="/opt/tools/bin:${PATH}"
 WORKDIR /workspace
 CMD ["/bin/bash"]

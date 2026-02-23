@@ -14,7 +14,6 @@ RUN_SYSPART_NEW="${RUN_SYSPART_NEW:-0}"
 RUN_CHESTNUT="${RUN_CHESTNUT:-0}"
 RUN_GO2SECCOMP="${RUN_GO2SECCOMP:-0}"
 
-SYSPART_NEW_BIN="${SYSPART_NEW_BIN:-./syspart_new}"
 GO2SECCOMP_BIN="${GO2SECCOMP_BIN:-/root/go/bin/go2seccomp}"
 
 TIMEOUT_BIN="${TIMEOUT_BIN:-}"
@@ -171,7 +170,7 @@ if (( RUN_SYSPART == 1 )); then
   have syspart || die "syspart not found in PATH"
 fi
 if (( RUN_SYSPART_NEW == 1 )); then
-  [[ -x "$SYSPART_NEW_BIN" ]] || die "SYSPART_NEW_BIN not found/executable: $SYSPART_NEW_BIN"
+  have syspart_new || die "syspart not found in PATH"
 fi
 if (( RUN_CONFINE == 1 )); then
   [[ -d "$CONFINE_DIR" ]] || die "CONFINE_DIR not found: $CONFINE_DIR"
@@ -289,7 +288,7 @@ for bin in "${BINARIES[@]}"; do
       echo "entry_hex=${entry_hex:-<none>}"
       echo "entry_addr=${entry_addr:-<none>}"
       echo "entry_symbol=$func"
-      echo "cmd=${SYSPART_NEW_BIN} -a 7,* -s ${entry_addr:-<none>} -p $bin"
+      echo "cmd=syspart_new -a 7,* -s ${entry_addr:-<none>} -p $bin"
     } > "$out_dir/syspart_new.meta"
 
     if [[ -z "${entry_addr:-}" ]]; then
@@ -300,7 +299,7 @@ for bin in "${BINARIES[@]}"; do
         "$out_dir/syspart_new.result.json" \
         "$out_dir/syspart_new.stderr" \
         "$out_dir/syspart_new.exitcode" \
-        -- ${SYSPART_NEW_TIMEOUT_PREFIX:-} "$SYSPART_NEW_BIN" -a 7,* -s "$entry_addr" -p "$bin"
+        -- ${SYSPART_NEW_TIMEOUT_PREFIX:-} syspart_new -a 7,* -s "$entry_addr" -p "$bin"
 
       cp -f "$out_dir/syspart_new.result.json" "$out_dir/syspart_new.stdout"
     fi

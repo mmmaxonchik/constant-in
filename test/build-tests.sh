@@ -128,7 +128,7 @@ build_c_family() {
   local out_dir="$4"
 
   local common_flags=()
-  if [[ "$lang" == "c" ]]; then
+ if [[ "$lang" == "c" ]]; then
     common_flags=(-std=c11 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE)
   else
     common_flags=(-std=c++17)
@@ -153,6 +153,9 @@ build_c_family() {
     "dyn:"
     "static:-static"
   )
+  if [[ "${TEST}" == "t08_shared_so" || "${TEST}" == "t10_many_in_so" ]]; then
+    link_mode_list=("dyn:")
+  fi
 
   log "  --- ${lang^^} builds (${compiler}) ---"
 
@@ -175,9 +178,18 @@ build_c_family() {
           local out="${out_dir}/${TEST}_${lang}_${compiler}_${opt_tag}_${lto_tag}_${pie_tag}_${link_tag}"
           local blog="${out}.build.log"
 
+          local extra_link_flags=""
+          if [[ "${TEST}" == "t08_shared_so" ]]; then
+            extra_link_flags="-ldl"
+          elif [[ "${TEST}" == "t10_many_in_so" ]]; then
+            extra_link_flags="-L${out_dir} -Wl,-rpath,\$ORIGIN -lt10_syswrap"
+          elif [[ "${TEST}" == "t09_static_lib" ]]; then
+            extra_link_flags="-Wl,--whole-archive ${out_dir}/libt09_syswrap.a -Wl,--no-whole-archive"
+          fi
+
           log "    * build: $(basename "$out")"
           set +e
-          "$compiler" "${common_flags[@]}" $opt_flags $lto_flags $pie_flags "$src" -o "$out" $link_flags >"$blog" 2>&1
+          "$compiler" "${common_flags[@]}" $opt_flags $lto_flags $pie_flags "$src" -o "$out" $link_flags $extra_link_flags >"$blog" 2>&1
           local rc=$?
           set -e
           if [[ $rc -ne 0 ]]; then
@@ -214,6 +226,13 @@ build_go() {
     uses_cgo="yes"
   fi
 
+  local cgo_ldflags_extra=""
+  if [[ "${TEST}" == "t09_static_lib" ]]; then
+    cgo_ldflags_extra="-Wl,--whole-archive ${out_dir}/libt09_syswrap.a -Wl,--no-whole-archive"
+  elif [[ "${TEST}" == "t10_many_in_so" ]]; then
+    cgo_ldflags_extra="-L${out_dir} -Wl,-rpath,\$ORIGIN -lt10_syswrap"
+  fi
+
   local buildmodes=("exe" "pie")
   local variant_tags=("rel" "dbg" "strip")
 
@@ -231,7 +250,7 @@ build_go() {
         local blog="${out}.build.log"
         log "    * build: $(basename "$out")"
         set +e
-        CGO_ENABLED=1 go build -buildmode="$bm" "${flags[@]}" -o "$out" "$src" >"$blog" 2>&1
+        CGO_ENABLED=1 CGO_LDFLAGS="${cgo_ldflags_extra}" go build -buildmode="$bm" "${flags[@]}" -o "$out" "$src" >"$blog" 2>&1
         local rc=$?
         set -e
         if [[ $rc -ne 0 ]]; then
@@ -252,7 +271,7 @@ build_go() {
         local blog1="${out1}.build.log"
         log "    * build: $(basename "$out1")"
         set +e
-        CGO_ENABLED=1 go build -buildmode="$bm" "${flags[@]}" -o "$out1" "$src" >"$blog1" 2>&1
+        CGO_ENABLED=1 CGO_LDFLAGS="${cgo_ldflags_extra}" go build -buildmode="$bm" "${flags[@]}" -o "$out1" "$src" >"$blog1" 2>&1
         local rc1=$?
         set -e
         if [[ $rc1 -eq 0 ]]; then
@@ -327,9 +346,18 @@ build_rust() {
 
         local out="${out_dir}/${TEST}_rust_${opt_tag}_${lto_tag}_${pie_tag}_dyn"
         local blog="${out}.build.log"
+        local extra_link_args=()
+        if [[ "${TEST}" == "t08_shared_so" ]]; then
+          extra_link_args=(-C link-arg=-ldl)
+        elif [[ "${TEST}" == "t10_many_in_so" ]]; then
+          extra_link_args=(-L "native=${out_dir}" -l "dylib=t10_syswrap" -C link-arg=-Wl,-rpath,\$ORIGIN)
+        elif [[ "${TEST}" == "t09_static_lib" ]]; then
+          extra_link_args=(-L "native=${out_dir}" -l "static=t09_syswrap")
+        fi
+
         log "    * build: $(basename "$out")"
         set +e
-        rustc $opt_flags $lto_flags $pie_flags "$src" -o "$out" >"$blog" 2>&1
+        rustc $opt_flags $lto_flags $pie_flags "${extra_link_args[@]}" "$src" -o "$out" >"$blog" 2>&1
         local rc=$?
         set -e
         if [[ $rc -ne 0 ]]; then
@@ -351,10 +379,18 @@ build_rust() {
   if rustc --print target-list 2>/dev/null | grep -q '^x86_64-unknown-linux-musl$'; then
     local out="${out_dir}/${TEST}_rust_O3_musl_static"
     local blog="${out}.build.log"
+    local extra_link_args=()
+    if [[ "${TEST}" == "t08_shared_so" ]]; then
+      extra_link_args=(-C link-arg=-ldl)
+    elif [[ "${TEST}" == "t10_many_in_so" ]]; then
+      extra_link_args=(-L "native=${out_dir}" -l "dylib=t10_syswrap" -C link-arg=-Wl,-rpath,\$ORIGIN)
+    elif [[ "${TEST}" == "t09_static_lib" ]]; then
+      extra_link_args=(-L "native=${out_dir}" -l "static=t09_syswrap")
+    fi
+
     log "    * build: $(basename "$out")"
     set +e
-    rustc -C opt-level=3 -C lto=yes --target x86_64-unknown-linux-musl "$src" -o "$out" >"$blog" 2>&1
-    local rc=$?
+    rustc -C opt-level=3 -C lto=yes --target x86_64-unknown-linux-musl "${extra_link_args[@]}" "$src" -o "$out" >"$blog" 2>&1    local rc=$?
     set -e
     if [[ $rc -eq 0 ]]; then
       build_and_trace "$out" "$out_dir"
@@ -372,6 +408,79 @@ build_rust() {
   fi
 }
 
+
+build_shared_t08_if_needed() {
+  local out_dir="$1"
+  if [[ "${TEST}" != "t08_shared_so" ]]; then
+    return 0
+  fi
+
+  local helper_src="${SRC_DIR}/shared/t08_syswrap.c"
+  local helper_out="${out_dir}/libt08_syswrap.so"
+
+  if [[ ! -f "$helper_src" ]]; then
+    log "  ! t08 helper source not found: $helper_src"
+    return 1
+  fi
+  if ! have gcc; then
+    log "  ! gcc not found; cannot build t08 helper .so"
+    return 1
+  fi
+
+  log "  * build helper .so: $(realpath --relative-to="$OUT_ROOT" "$helper_out" 2>/dev/null || basename "$helper_out")"
+  gcc -shared -fPIC -O2 "$helper_src" -o "$helper_out"
+}
+
+build_shared_t10_if_needed() {
+  local out_dir="$1"
+  if [[ "${TEST}" != "t10_many_in_so" ]]; then
+    return 0
+  fi
+
+  local helper_src="${SRC_DIR}/shared/t10_syswrap.c"
+  local helper_out="${out_dir}/libt10_syswrap.so"
+
+  if [[ ! -f "$helper_src" ]]; then
+    log "  ! t10 helper source not found: $helper_src"
+    return 1
+  fi
+  if ! have gcc; then
+    log "  ! gcc not found; cannot build t10 helper .so"
+    return 1
+  fi
+
+  log "  * build helper .so: $(realpath --relative-to="$OUT_ROOT" "$helper_out" 2>/dev/null || basename "$helper_out")"
+  gcc -shared -fPIC -O2 -nostdlib -nodefaultlibs "$helper_src" -o "$helper_out"
+}
+
+build_static_t09_if_needed() {
+  local out_dir="$1"
+  if [[ "${TEST}" != "t09_static_lib" ]]; then
+    return 0
+  fi
+
+  local helper_src="${SRC_DIR}/shared/t09_syswrap.c"
+  local helper_obj="${out_dir}/t09_syswrap.o"
+  local helper_out="${out_dir}/libt09_syswrap.a"
+
+  if [[ ! -f "$helper_src" ]]; then
+    log "  ! t09 helper source not found: $helper_src"
+    return 1
+  fi
+  if ! have gcc; then
+    log "  ! gcc not found; cannot build t09 helper .a"
+    return 1
+  fi
+  if ! have ar; then
+    log "  ! ar not found; cannot build t09 helper .a"
+    return 1
+  fi
+
+  log "  * build helper .a: $(realpath --relative-to="$OUT_ROOT" "$helper_out" 2>/dev/null || basename "$helper_out")"
+  gcc -O2 -fPIC -c "$helper_src" -o "$helper_obj"
+  ar rcs "$helper_out" "$helper_obj"
+}
+
 log "=== Test: ${TEST} (args: ${PROG_ARGS[*]-}) ==="
 log "=== Looking for sources in: ${SRC_DIR}/{c,cpp,go,rust} ==="
 
@@ -382,6 +491,9 @@ if [[ -f "$c_src" ]]; then
   built_any=1
   c_out="${OUT_ROOT}/c"
   mkdir -p "$c_out"
+  build_shared_t08_if_needed "$c_out"
+  build_shared_t10_if_needed "$c_out"
+  build_static_t09_if_needed "$c_out"
   log "== Found C: $c_src -> $c_out =="
   if have gcc; then build_c_family "c" "gcc" "$c_src" "$c_out"; else log "  ! gcc not found; C(gcc) skipped"; fi
   if have clang; then build_c_family "c" "clang" "$c_src" "$c_out"; else log "  ! clang not found; C(clang) skipped"; fi
@@ -392,6 +504,9 @@ if [[ -f "$cpp_src" ]]; then
   built_any=1
   cpp_out="${OUT_ROOT}/cpp"
   mkdir -p "$cpp_out"
+  build_shared_t08_if_needed "$cpp_out"
+  build_shared_t10_if_needed "$cpp_out"
+  build_static_t09_if_needed "$cpp_out"
   log "== Found C++: $cpp_src -> $cpp_out =="
   if have g++; then build_c_family "cpp" "g++" "$cpp_src" "$cpp_out"; else log "  ! g++ not found; C++(g++) skipped"; fi
   if have clang++; then build_c_family "cpp" "clang++" "$cpp_src" "$cpp_out"; else log "  ! clang++ not found; C++(clang++) skipped"; fi
@@ -402,6 +517,9 @@ if [[ -f "$go_src" ]]; then
   built_any=1
   go_out="${OUT_ROOT}/go"
   mkdir -p "$go_out"
+  build_shared_t08_if_needed "$go_out"
+  build_shared_t10_if_needed "$go_out"
+  build_static_t09_if_needed "$go_out"
   log "== Found Go: $go_src -> $go_out =="
   build_go "$go_src" "$go_out"
 fi
@@ -411,6 +529,9 @@ if [[ -f "$rs_src" ]]; then
   built_any=1
   rs_out="${OUT_ROOT}/rust"
   mkdir -p "$rs_out"
+  build_shared_t08_if_needed "$rs_out"
+  build_shared_t10_if_needed "$rs_out"
+  build_static_t09_if_needed "$rs_out"
   log "== Found Rust: $rs_src -> $rs_out =="
   build_rust "$rs_src" "$rs_out"
 fi

@@ -88,6 +88,37 @@ index f29d711c..83d828d9 100644
      };
  
      DerivedType &derived() {
+diff --git a/src/conductor/conductor.cpp b/src/conductor/conductor.cpp
+index a04856ab..e66aaa12 100644
+--- a/src/conductor/conductor.cpp
++++ b/src/conductor/conductor.cpp
+@@ -32,6 +32,7 @@
+ 
+ #include "log/log.h"
+ #include "log/temp.h"
++#include <cstdio>
+ 
+ IFuncList *egalito_ifuncList __attribute__((weak));
+ 
+@@ -103,7 +104,17 @@ void Conductor::parseLibraries() {
+             continue;  // already parsed
+         }
+ 
+-        ElfMap *elf = new ElfMap(library->getResolvedPathCStr());
++        const char *path = library->getResolvedPathCStr();
++
++        if(!path || path[0] == '\0') {
++            std::string name = library->getName();
++            std::fprintf(stderr,
++                         "[syspart_new] WARNING: skipping library with empty resolved path (name=%s)\n",
++                         name.c_str());
++            continue;
++        }
++
++        ElfMap *elf = new ElfMap(path);
+         parse(elf, library);
+     }
+ }
 diff --git a/src/disasm/disassemble.cpp b/src/disasm/disassemble.cpp
 index 924d44f4..b5d39310 100644
 --- a/src/disasm/disassemble.cpp
@@ -226,3 +257,27 @@ index 924d44f4..b5d39310 100644
      //TemporaryLogLevel tll("disasm", 10);
  
      address_t codeStart = section->getVirtualAddress();
+diff --git a/src/elf/elfmap.cpp b/src/elf/elfmap.cpp
+index b71b2fd7..e3a9a81d 100644
+--- a/src/elf/elfmap.cpp
++++ b/src/elf/elfmap.cpp
+@@ -1,4 +1,6 @@
+ #include <iostream>
++#include <stdexcept>
++#include <string>
+ #include <sstream>
+ #include <cstring>
+ #include <elf.h>
+@@ -55,7 +57,11 @@ void ElfMap::setup() {
+ void ElfMap::parseElf(const char *filename) {
+     CLOG(1, "creating ElfMap for file [%s]", filename);
+     fd = open(filename, O_RDONLY, 0);
+-    if(fd < 0) throw "can't open executable image\n";
++    if (fd < 0) {
++        std::string fname = filename ? filename : "(null)";
++        std::string msg = "ElfMap::parseElf: can't open file [" + fname + "]";
++        throw std::runtime_error(msg);
++    }
+ 
+     // find the length of the file
+     length = static_cast<size_t>(lseek(fd, 0, SEEK_END));
